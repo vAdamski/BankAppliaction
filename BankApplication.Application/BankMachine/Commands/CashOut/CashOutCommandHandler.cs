@@ -52,29 +52,21 @@ namespace BankApplication.Application.BankMachine.Commands.CashOut
                 if (request.AmountOfCashout > cashInMachine)
                     throw new BadRequestException($"Not enough money in cash machine.");
 
-                // Cashout money proces
-                var amountToCashout = request.AmountOfCashout;
+                // Cashout money process 
                 var listBanknoteToCashout = new List<int>();
-                var amountBanknotesToCashout = 0;
 
-                foreach (var banknote in cashMachineContainer)
+                listBanknoteToCashout = CashOutAlgorithm(new Dictionary<int, int>(cashMachineContainer), listBanknoteToCashout, request.AmountOfCashout);
+
+                if (listBanknoteToCashout.Count == 0)
+                    throw new BadRequestException($"Cash machine can not withdraw cash");
+
+                foreach (var banknote in listBanknoteToCashout)
                 {
-                    while (cashMachineContainer[banknote.Key] > 0 && amountToCashout - banknote.Key >= 0)
-                    {
-                        amountToCashout -= banknote.Key;
-                        cashMachineContainer[banknote.Key] -= 1;
-                        listBanknoteToCashout.Add(banknote.Key);
-                        amountBanknotesToCashout++;
-                    }
+                    cashMachineContainer[banknote] -= 1;
                 }
-
-                // Validate if posible to cash out money. Example: cashout = 50, banknote in machine is only 100 -> Imposible
-                if(amountBanknotesToCashout == 0)
-                    throw new BadRequestException($"Not enough money in cash machine.");
-
-
+                
                 // Update machine banknote storage, user account and save changes
-                account.AccountBalance -= amountToCashout;
+                account.AccountBalance -= request.AmountOfCashout;
                 cashMachine.Banknote200 = cashMachineContainer[200];
                 cashMachine.Banknote100 = cashMachineContainer[100];
                 cashMachine.Banknote50 = cashMachineContainer[50];
@@ -100,6 +92,34 @@ namespace BankApplication.Application.BankMachine.Commands.CashOut
             {
                 throw;
             }
+        }
+
+        // It's not a perfect solution, but Keep It Simple Stupid 
+        private List<int> CashOutAlgorithm(Dictionary<int, int> cashMachineStorage, List<int> banknotesToCashout,
+            int amountToCashout)
+        {
+            if (banknotesToCashout.Sum() == amountToCashout || cashMachineStorage.Count == 0) return banknotesToCashout;
+            banknotesToCashout.Clear();
+
+            var copy = new Dictionary<int, int>(cashMachineStorage);
+            var copyAmountToCashout = amountToCashout;
+            foreach (var banknote in copy)
+            {
+                while (copy[banknote.Key] > 0 && copyAmountToCashout - banknote.Key >= 0)
+                {
+                    copyAmountToCashout -= banknote.Key;
+                    copy[banknote.Key] -= 1;
+                    banknotesToCashout.Add(banknote.Key);
+                }
+            }
+
+            if (copyAmountToCashout != 0)
+            {
+                cashMachineStorage.Remove(cashMachineStorage.Keys.First());
+                return CashOutAlgorithm(cashMachineStorage, banknotesToCashout, amountToCashout);
+            }
+
+            return banknotesToCashout;
         }
     }
 }
